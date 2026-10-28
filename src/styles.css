@@ -62,6 +62,8 @@
 
 /* FLOWA — product colors stay separate from connection states. */
 :root {
+  /* Identificador de entrega: força uma URL de CSS nova após a publicação. */
+  --flowa-release: "2026-10-28-caixa-premium";
   color-scheme: dark;
   --radius: .875rem;
   --brand: #765bfa;

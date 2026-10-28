@@ -1,0 +1,395 @@
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "@/components/ui/sheet";
+import { BrandMark } from "@/components/brand-mark";
+import { type ReactNode } from "react";
+import {
+  LayoutDashboard, Bot, KanbanSquare, LogOut, Smartphone, Shield,
+  Inbox, Users, BarChart3, Settings, Contact, Zap, MessageCircle, Megaphone, Webhook, Wallet, Truck, CreditCard, Menu, CircleDollarSign,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { brand, supportWhatsappUrl, supportWhatsappDisplay } from "@/config/brand";
+import { TrialBanner } from "@/components/trial-banner";
+import { CreditsBadge } from "@/components/credits-badge";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { MobileBottomNav, type MobileNavItem } from "@/components/mobile-bottom-nav";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
+import type { CompanyRow, Membership } from "@/lib/tenant";
+import { useWhatsappStatus } from "@/hooks/use-whatsapp-status";
+
+type NavItem = {
+  to: string;
+  label: string;
+  icon: any;
+  adminOnly?: boolean;
+  tag?: string;
+  badge?: boolean;
+};
+
+const sections: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Atendimento",
+    items: [
+      { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/app/conversas", label: "Conversas", icon: Inbox, badge: true },
+      { to: "/app/crm", label: "CRM Kanban", icon: KanbanSquare },
+      { to: "/app/campanhas", label: "Campanhas", icon: Megaphone, adminOnly: true },
+      { to: "/app/agente", label: "Agente IA", icon: Bot, tag: "IA", adminOnly: true },
+    ],
+  },
+  {
+    label: "Gestão",
+    items: [
+      { to: "/app/contatos", label: "Contatos", icon: Contact },
+      { to: "/app/fornecedores", label: "Fornecedores", icon: Truck },
+      { to: "/app/caixa", label: "Caixa", icon: CircleDollarSign },
+      { to: "/app/financeiro", label: "Financeiro", icon: Wallet, adminOnly: true, tag: "PRO" },
+      { to: "/app/relatorios", label: "Relatórios", icon: BarChart3, adminOnly: true },
+      { to: "/app/conexao", label: "Conexão", icon: Smartphone },
+      { to: "/app/equipe", label: "Equipe", icon: Users, adminOnly: true },
+      { to: "/app/integracoes", label: "Integrações", icon: Webhook, adminOnly: true },
+      { to: "/app/configuracoes", label: "Configurações", icon: Settings, adminOnly: true },
+    ],
+  },
+];
+
+export function AppShell({
+  children,
+  company,
+  membership,
+  email,
+  isSuperAdmin,
+}: {
+  children: ReactNode;
+  company: CompanyRow | null;
+  membership?: Membership | null;
+  email?: string | null;
+  isSuperAdmin?: boolean;
+}) {
+  const loc = useLocation();
+  const navigate = useNavigate();
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    toast.success("Sessão encerrada");
+    navigate({ to: "/entrar", replace: true });
+  }
+
+  const primary = "var(--brand)";
+  const isAdmin = membership?.role === "owner" || membership?.role === "admin";
+  const roleLabel =
+    membership?.role === "owner" ? "Dono"
+    : membership?.role === "admin" ? "Admin"
+    : membership?.role === "atendente" ? "Atendente"
+    : "Membro";
+  const userName = (email || "Você").split("@")[0];
+
+  const mobileItems: MobileNavItem[] = [
+    { to: "/app/dashboard", label: "Início", icon: LayoutDashboard },
+    { to: "/app/conversas", label: "Conversas", icon: Inbox },
+    { to: "/app/crm", label: "CRM", icon: KanbanSquare },
+    { to: "/app/contatos", label: "Contatos", icon: Contact },
+    { to: "/app/caixa", label: "Caixa", icon: CircleDollarSign },
+    isAdmin
+      ? { to: "/app/agente", label: "Agente", icon: Bot }
+      : { to: "/app/conexao", label: "Conexão", icon: Smartphone },
+  ];
+
+  return (
+    <div className="workspace-root min-h-screen flex flex-col bg-background text-foreground">
+      {company && <TrialBanner company={company} />}
+      {company && (
+        <div className="hidden md:flex items-center justify-end gap-2 px-4 py-1.5 bg-[color:var(--panel)]/60 border-b border-[color:var(--hairline)]">
+          <CreditsBadge />
+        </div>
+      )}
+
+      {/* Mobile top bar */}
+      <header className="md:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 bg-[color:var(--panel)]/80 backdrop-blur-xl border-b border-[color:var(--hairline)]">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {company?.logo_url ? (
+            <img src={company.logo_url} alt={company.nome} className="size-8 rounded-lg object-cover ring-1 ring-[color:var(--hairline)]" />
+          ) : (
+            <BrandMark className="size-8" />
+          )}
+          <div className="min-w-0">
+            <div className="font-display font-bold tracking-normal text-[14.5px] leading-none truncate">{brand.name}</div>
+            <div className="text-[10.5px] text-muted-foreground truncate mt-0.5">{company?.nome || "Sua empresa"}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {isAdmin && (
+            <Link to="/app/checkout" search={{ mode: "upgrade" }} title={plansLabel(company)}
+              className="size-9 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground">
+              <CreditCard className="size-[18px]" />
+            </Link>
+          )}
+          <ThemeToggle />
+          <Button variant="ghost" size="icon"
+            onClick={signOut}
+            title="Sair"
+            className="size-9 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground"
+          >
+            <LogOut className="size-[18px]" />
+          </Button>
+        </div>
+      </header>
+
+      <div className="flex flex-1 flex-col md:flex-row">
+        <Sidebar
+          loc={loc}
+          company={company}
+          isSuperAdmin={isSuperAdmin}
+          isAdmin={isAdmin}
+          primary={primary}
+          userName={userName}
+          email={email}
+          roleLabel={roleLabel}
+          signOut={signOut}
+        />
+        <main className="workspace-main min-w-0 flex-1 px-4 pt-4 pb-28 md:px-6 md:py-5 md:pb-8 w-full mx-auto">
+          <div className="hidden md:flex items-center justify-between gap-3 mb-5 pb-4 border-b border-border">
+            <WhatsappStatusPill />
+            <div className="flex items-center gap-2 ml-auto">
+              <ThemeToggle />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Abrir menu do perfil"
+                    className="size-9 rounded-full grid place-items-center text-[13px] font-bold text-[color:var(--brand-text)] ring-1 ring-[color:var(--hairline-strong)] transition-colors hover:bg-[color:var(--brand-soft-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    style={{ background: "var(--brand-soft)" }}
+                    title={email || "Abrir perfil"}
+                  >
+                    {(userName || "U").slice(0, 1).toUpperCase()}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="font-normal">
+                    <p className="text-sm font-medium leading-none">{userName}</p>
+                    {email && <p className="mt-1 truncate text-xs text-muted-foreground">{email}</p>}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate({ to: "/app/configuracoes" })}>
+                    <Settings className="mr-2 size-4" />Configurações
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={signOut} className="text-destructive focus:text-destructive">
+                    <LogOut className="mr-2 size-4" />Sair
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          {children}
+        </main>
+      </div>
+
+      <MobileBottomNav items={mobileItems} accent={primary} menu={
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" aria-label="Abrir menu completo" className="relative h-auto flex-1 flex-col gap-0.5 rounded-lg px-0 py-1.5 text-[10.5px] font-medium text-muted-foreground [&_svg]:size-[22px]">
+              <Menu strokeWidth={1.9} />
+              <span>Menu</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-lg px-4 pt-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            <SheetHeader className="text-left mb-5">
+              <SheetTitle>Menu</SheetTitle>
+              <SheetDescription>{brand.name} · {company?.nome || "Sua empresa"}</SheetDescription>
+            </SheetHeader>
+            <nav aria-label="Menu completo" className="space-y-5">
+              {sections.map((section) => (
+                <div key={section.label}>
+                  <div className="mb-2 px-3 text-xs font-semibold uppercase text-muted-foreground">{section.label}</div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {section.items.filter((item) => !item.adminOnly || isAdmin).map((item) => {
+                      const Icon = item.icon;
+                      const active = loc.pathname.startsWith(item.to);
+                      return (
+                        <SheetClose asChild key={item.to}>
+                          <Link to={item.to} aria-current={active ? "page" : undefined}
+                            className={`flex min-h-12 min-w-0 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium ${active ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-accent"}`}>
+                            <Icon className="size-5 shrink-0" />
+                            <span className="min-w-0 break-words">{item.label}</span>
+                          </Link>
+                        </SheetClose>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {isAdmin && (
+                <div>
+                  <div className="mb-2 px-3 text-xs font-semibold uppercase text-muted-foreground">Assinatura</div>
+                  <SheetClose asChild>
+                    <Link to="/app/checkout" search={{ mode: "upgrade" }} className="flex min-h-12 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent">
+                      <CreditCard className="size-5 shrink-0" />{plansLabel(company)}
+                    </Link>
+                  </SheetClose>
+                </div>
+              )}
+              {isSuperAdmin && (
+                <SheetClose asChild>
+                  <Link to="/master/painel" className="flex min-h-12 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-destructive hover:bg-accent">
+                    <Shield className="size-5" />Painel Master
+                  </Link>
+                </SheetClose>
+              )}
+              <SheetClose asChild>
+                <a href={supportWhatsappUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-12 items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent">
+                  <MessageCircle className="size-5" />Suporte
+                </a>
+              </SheetClose>
+            </nav>
+          </SheetContent>
+        </Sheet>
+      } />
+    </div>
+  );
+}
+
+function Sidebar({
+  loc, company, isSuperAdmin, isAdmin, primary, userName, email, roleLabel, signOut,
+}: any) {
+  return (
+    <aside className="workspace-sidebar hidden md:flex w-[214px] shrink-0 min-h-screen border-r border-[color:var(--hairline)] bg-[color:var(--sidebar-bg)] flex-col">
+      <div className="px-4 py-5 flex items-center gap-2.5 border-b border-[color:var(--hairline)]">
+        {company?.logo_url ? (
+          <img src={company.logo_url} alt={company.nome} className="size-10 rounded-xl object-cover ring-1 ring-[color:var(--hairline)]" />
+        ) : (
+          <BrandMark className="size-10" />
+        )}
+        <div className="min-w-0">
+          <div className="font-display font-medium tracking-normal truncate text-[16px]">{brand.name}</div>
+          <div className="text-[11.5px] text-muted-foreground truncate -mt-0.5">{company?.nome || "Sua empresa"}</div>
+        </div>
+      </div>
+
+      <nav className="p-2.5 flex-1 overflow-y-auto space-y-5">
+        {sections.map((sec) => (
+          <div key={sec.label}>
+            <div className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
+              {sec.label}
+            </div>
+            <div className="flex flex-col gap-1">
+              {sec.items.filter((i) => !i.adminOnly || isAdmin).map((item) => (
+                <NavLink key={item.to} item={item} active={loc.pathname.startsWith(item.to)} primary={primary} />
+              ))}
+            </div>
+          </div>
+        ))}
+        {isAdmin && <PlansLink company={company} active={loc.pathname.startsWith("/app/checkout")} />}
+      </nav>
+
+      <div className="p-3 border-t border-[color:var(--hairline)]">
+        {isSuperAdmin && (
+          <Link to="/master/painel" className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium text-destructive hover:bg-[color:var(--panel-2)]">
+            <Shield className="size-4" /> Painel Master
+          </Link>
+        )}
+        <div className="flex items-center gap-3 px-2 py-2 rounded-sm bg-[color:var(--panel-2)] border border-[color:var(--hairline)]">
+          <div
+            className="size-9 rounded-full grid place-items-center text-[13px] font-bold text-[color:var(--brand-text)] ring-1 ring-[color:var(--hairline-strong)] shrink-0"
+            style={{ background: "var(--brand-soft)" }}
+          >
+            {(userName || "U").slice(0, 1).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13.5px] font-semibold truncate">{userName}</div>
+            <div className="text-[11px] text-muted-foreground truncate" title={email || ""}>{roleLabel}</div>
+          </div>
+          <Button variant="ghost" size="icon" onClick={signOut} title="Sair" className="size-8 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-[color:var(--panel)]">
+            <LogOut className="size-4" />
+          </Button>
+        </div>
+        <a
+          href={supportWhatsappUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 flex items-center gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          <MessageCircle className="size-3" />
+          <span>Suporte: {supportWhatsappDisplay}</span>
+        </a>
+      </div>
+    </aside>
+  );
+}
+
+/** Empresa com plano contratado vê "Selecionar plano"; sem plano (trial), "Planos". */
+function plansLabel(company: CompanyRow | null) {
+  return company?.status_cobranca === "ativo" ? "Selecionar plano" : "Planos";
+}
+
+function PlansLink({ company, active }: { company: CompanyRow | null; active: boolean }) {
+  return (
+    <div>
+      <div className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">Assinatura</div>
+      <Link to="/app/checkout" search={{ mode: "upgrade" }}
+        className={`flex items-center gap-3 px-3 py-2.5 rounded-sm text-[12px] font-medium whitespace-nowrap ${active ? "text-foreground bg-[color:var(--panel-2)]" : "text-muted-foreground hover:text-foreground hover:bg-[color:var(--panel-2)]"}`}>
+        <CreditCard className="size-4" /> {plansLabel(company)}
+      </Link>
+    </div>
+  );
+}
+
+function NavLink({ item, active, primary }: { item: NavItem; active: boolean; primary: string }) {
+  const Icon = item.icon;
+  return (
+    <Link
+      to={item.to}
+      className={`relative flex items-center gap-3 px-3 py-2.5 rounded-sm text-[12px] font-medium whitespace-nowrap transition-all ${
+        active
+          ? "text-foreground"
+          : "text-muted-foreground hover:text-foreground hover:bg-[color:var(--panel-2)]"
+      }`}
+      style={
+        active
+          ? {
+              background: "var(--brand-soft)",
+              boxShadow: `inset 0 0 0 1px var(--brand-soft-strong), 0 0 0 0 transparent`,
+            }
+          : undefined
+      }
+    >
+      {active && (
+        <span
+          className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r"
+          style={{ background: primary }}
+        />
+      )}
+      <Icon className="size-[18px] shrink-0" style={active ? { color: primary } : undefined} />
+      <span className="flex-1 truncate">{item.label}</span>
+      {item.tag && (
+        <span
+          className="text-[10px] font-bold px-1.5 py-0.5 rounded ring-1"
+          style={{
+            background: "var(--brand-soft)",
+            color: "var(--brand-text)",
+            borderColor: "var(--brand-soft-strong)",
+          }}
+        >
+          {item.tag}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+function WhatsappStatusPill() {
+  const status = useWhatsappStatus();
+  const connected = status === "connected";
+  const connecting = status === "connecting";
+  const label = connected ? "WhatsApp conectado" : connecting ? "Conectando…" : "WhatsApp desconectado";
+  const color = connected ? "var(--success)" : connecting ? "var(--warning)" : "var(--destructive)";
+  return (
+    <div
+      className="flex items-center gap-2 text-[13.5px] font-medium px-3 py-1.5 rounded-full bg-[color:var(--panel)] border border-[color:var(--hairline)]"
+      style={{ color }}
+    >
+      <span className="size-1.5 rounded-full" style={{ background: color }} />
+      {label}
+    </div>
+  );
+}

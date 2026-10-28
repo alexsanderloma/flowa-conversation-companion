@@ -1,0 +1,8 @@
+PassengerAppRoot /home/u236211174/domains/flowa.store/hbuilds/current/nodejs
+PassengerAppType node
+PassengerNodejs /opt/alt/alt-nodejs22/root/bin/node
+PassengerStartupFile server/index.mjs
+PassengerBaseURI /
+PassengerRestartDir /home/u236211174/domains/flowa.store/hbuilds/current/nodejs/tmp
+SetEnv LSNODE_CONSOLE_LOG console.log
+SetEnv TOKIO_WORKER_THREADS 2

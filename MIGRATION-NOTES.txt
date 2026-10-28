@@ -1,0 +1,9 @@
+Fonte: exportação do Lovable
+Projeto: Remix of AtendeZap - TurboSaaS
+Project ID: 5815076a-a038-4c29-9856-82376b0af5a4
+Exportado em: 2026-10-24T22:17:11
+Arquivo original: C:\Users\alezi\Downloads\1451765a-8132-4fda-a241-0806bf72db7f.tmp
+SHA256: D30788D6B4A49C7A460D59701D6EE90F81ECFFCCD10DE2122AC5FEB5499F4834
+Arquivos extraídos: 286
+
+Segredos e dados de produção não fazem parte desta cópia e devem ser configurados no servidor antes do corte.

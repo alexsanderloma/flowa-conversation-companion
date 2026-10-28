@@ -3,7 +3,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { brand } from "@/config/brand";
 import {
   Sparkles, LayoutDashboard, Inbox, KanbanSquare, Bot, Zap, LogIn,
-  Contact, BarChart3, Smartphone, Users, Settings, Megaphone, Plug, Wallet,
+  Contact, BarChart3, Smartphone, Users, Settings, Megaphone, Plug, Wallet, CircleDollarSign,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileBottomNav, type MobileNavItem } from "@/components/mobile-bottom-nav";
@@ -34,6 +34,7 @@ const sections: { label: string; items: { to: string; label: string; icon: any; 
     label: "Gestão",
     items: [
       { to: "/demo/contatos", label: "Contatos", icon: Contact },
+      { to: "/demo/caixa", label: "Caixa", icon: CircleDollarSign, tag: "NOVO" },
       { to: "/demo/financeiro", label: "Financeiro", icon: Wallet, tag: "PRO" },
       { to: "/demo/conexao", label: "Conexão", icon: Smartphone },
       { to: "/demo/equipe", label: "Equipe", icon: Users },

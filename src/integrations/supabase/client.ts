@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { brokeredPreviewStorage } from './previewAuthStorage';
+import { selectSupabaseUrl } from '@/lib/supabase-proxy';
 
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith('sb_publishable_') || value.startsWith('sb_secret_');
@@ -62,9 +63,15 @@ function createSupabaseClient() {
     throw new Error(message);
   }
 
-  return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  // On the live FLOWA domain, keep the browser on the same origin. This avoids
+  // mobile/DNS/network blocks against the Supabase hostname while preserving
+  // Supabase as the authority for authentication and RLS.
+  const browserOrigin = typeof window === 'undefined' ? undefined : window.location.origin;
+  const endpoint = selectSupabaseUrl(SUPABASE_URL, import.meta.env.PROD, browserOrigin);
+
+  return createClient<Database>(endpoint, SUPABASE_PUBLISHABLE_KEY, {
     global: {
-      fetch: createSupabaseFetch(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY),
+      fetch: createSupabaseFetch(endpoint, SUPABASE_PUBLISHABLE_KEY),
     },
     auth: {
       storage: brokeredPreviewStorage(),

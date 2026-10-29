@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { handleSupabaseProxy } from '@/lib/supabase-proxy.server';
 
 async function handle({ request }: { request: Request }) {
-  const { handleSupabaseProxy } = await import('@/lib/supabase-proxy.server');
   return handleSupabaseProxy(request);
 }
 

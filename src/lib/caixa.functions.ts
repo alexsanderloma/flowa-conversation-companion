@@ -68,7 +68,16 @@ export const caixaDashboard = createServerFn({ method: "POST" })
       : { data: [], error: null };
     if (profilesError) throw new Error(profilesError.message);
     const sellerById = new Map((profiles ?? []).map((profile: any) => [profile.user_id, profile.nome || profile.email || "Usuário"]));
-    const salesWithSeller = (sales ?? []).map((sale: any) => ({ ...sale, vendedor_nome: sellerById.get(sale.vendedor_id) ?? "Usuário" }));
+    const salesWithSeller = (sales ?? []).map((sale: any) => {
+      let manual: { employee_name?: string; payment_label?: string; flowa_manual_sale?: boolean } = {};
+      try { manual = JSON.parse(sale.observacao ?? "{}"); } catch { /* observações antigas são texto livre */ }
+      return {
+        ...sale,
+        vendedor_nome: manual.employee_name || sellerById.get(sale.vendedor_id) || "Usuário",
+        pagamento_rotulo: manual.payment_label || sale.forma_pagamento,
+        manual: manual.flowa_manual_sale === true,
+      };
+    });
     const confirmed = salesWithSeller.filter((sale: any) => sale.status === "confirmada");
     const revenueCents = confirmed.reduce((sum: number, sale: any) => sum + Number(sale.venda_cents), 0);
     const costCents = confirmed.reduce((sum: number, sale: any) => sum + Number(sale.custo_cents), 0);
@@ -100,6 +109,91 @@ export const caixaConfirmSale = createServerFn({ method: "POST" })
     const { data: saleId, error } = await context.supabase.rpc("caixa_confirmar_venda", { _produto_id: data.productId, _quantidade: data.quantity, _forma_pagamento: data.paymentMethod, _cliente_nome: data.customerName || null, _observacao: data.notes || null, _data_venda: data.date });
     if (error) throw new Error(error.message);
     return { id: saleId as string };
+  });
+
+/**
+ * Registra uma venda digitada manualmente no Caixa. Ela não cria produto nem
+ * movimenta estoque: o produto é apenas um retrato textual desta venda.
+ */
+export const caixaConfirmManualSale = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { quantity: number; productName: string; paymentMethod: string; employeeName: string; profitCents: number; totalCents: number; date: string }) => ({
+    quantity: Math.floor(Number(d.quantity)),
+    productName: String(d.productName ?? "").trim().slice(0, 240),
+    paymentMethod: String(d.paymentMethod ?? "").trim(),
+    employeeName: String(d.employeeName ?? "").trim().slice(0, 120),
+    profitCents: Number(d.profitCents),
+    totalCents: Number(d.totalCents),
+    date: isoDate(d.date),
+  }))
+  .handler(async ({ context, data }) => {
+    const { companyId } = await currentCompany(context.supabase, context.userId);
+    if (!Number.isInteger(data.quantity) || data.quantity < 1 || data.quantity > 10000) throw new Error("Informe uma quantidade válida");
+    if (data.productName.length < 2) throw new Error("Informe o produto vendido");
+    if (data.employeeName.length < 2) throw new Error("Informe o funcionário responsável");
+    if (!Number.isInteger(data.totalCents) || data.totalCents <= 0) throw new Error("Informe o total da venda");
+    if (!Number.isInteger(data.profitCents) || data.profitCents < 0 || data.profitCents > data.totalCents) throw new Error("Informe um lucro válido");
+
+    const paymentMap: Record<string, { databaseValue: string; label: string }> = {
+      "credito_a_vista": { databaseValue: "credito", label: "Crédito à vista" },
+      parcelado: { databaseValue: "credito", label: "Parcelado" },
+      debito: { databaseValue: "debito", label: "Débito" },
+      pix: { databaseValue: "pix", label: "Pix" },
+      dinheiro: { databaseValue: "dinheiro", label: "Dinheiro" },
+    };
+    const payment = paymentMap[data.paymentMethod];
+    if (!payment) throw new Error("Selecione a forma de pagamento");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const costCents = data.totalCents - data.profitCents;
+    const observation = JSON.stringify({
+      flowa_manual_sale: true,
+      employee_name: data.employeeName,
+      payment_label: payment.label,
+    });
+    const { data: sale, error: saleError } = await supabaseAdmin
+      .from("caixa_venda")
+      .insert({
+        company_id: companyId,
+        vendedor_id: context.userId,
+        forma_pagamento: payment.databaseValue,
+        status: "confirmada",
+        venda_cents: data.totalCents,
+        custo_cents: costCents,
+        lucro_cents: data.profitCents,
+        observacao: observation,
+        data_venda: data.date,
+        confirmado_em: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (saleError || !sale) throw new Error(saleError?.message ?? "Não foi possível registrar a venda");
+
+    const { error: itemError } = await supabaseAdmin.from("caixa_venda_item").insert({
+      venda_id: sale.id,
+      company_id: companyId,
+      produto_id: null,
+      produto_nome_snapshot: data.productName,
+      quantidade: data.quantity,
+      preco_unitario_cents: Math.round(data.totalCents / data.quantity),
+      custo_unitario_cents: Math.round(costCents / data.quantity),
+      total_venda_cents: data.totalCents,
+      total_custo_cents: costCents,
+    });
+    if (itemError) {
+      await supabaseAdmin.from("caixa_venda").delete().eq("id", sale.id).eq("company_id", companyId);
+      throw new Error(itemError.message);
+    }
+    const { error: auditError } = await supabaseAdmin.from("caixa_auditoria").insert({
+      company_id: companyId,
+      entidade: "venda",
+      entidade_id: sale.id,
+      acao: "confirmar_manual",
+      autor_id: context.userId,
+      depois: { quantidade: data.quantity, produto: data.productName, funcionario: data.employeeName, pagamento: payment.label, lucro_cents: data.profitCents, total_cents: data.totalCents },
+    });
+    if (auditError) console.error("Falha ao gravar auditoria do Caixa", auditError.message);
+    return { id: sale.id };
   });
 
 export const caixaCancelSale = createServerFn({ method: "POST" })

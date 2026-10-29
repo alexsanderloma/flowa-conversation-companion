@@ -50,7 +50,7 @@ BEGIN
   IF _quantidade IS NULL OR _quantidade < 1 OR _quantidade > 10000 THEN RAISE EXCEPTION 'Quantidade inválida'; END IF;
   IF nullif(trim(_produto_nome), '') IS NULL OR char_length(trim(_produto_nome)) > 240 THEN RAISE EXCEPTION 'Produto inválido'; END IF;
   IF _forma_pagamento NOT IN ('pix', 'dinheiro', 'debito', 'credito') THEN RAISE EXCEPTION 'Forma de pagamento inválida'; END IF;
-  IF _pagamento_rotulo NOT IN ('Crédito à vista', 'Parcelado', 'Débito', 'Pix', 'Dinheiro') THEN RAISE EXCEPTION 'Forma de pagamento inválida'; END IF;
+  IF _pagamento_rotulo NOT IN ('Crédito à vista', 'Parcelado', 'Débito', 'Pix', 'Dinheiro') AND _pagamento_rotulo !~ '^Parcelado · [0-9]+x$' THEN RAISE EXCEPTION 'Forma de pagamento inválida'; END IF;
   IF nullif(trim(_funcionario_nome), '') IS NULL OR char_length(trim(_funcionario_nome)) > 120 THEN RAISE EXCEPTION 'Funcionário inválido'; END IF;
   IF _venda_cents IS NULL OR _venda_cents <= 0 OR _custo_cents IS NULL OR _custo_cents < 0 OR _taxas_cents IS NULL OR _taxas_cents < 0 THEN RAISE EXCEPTION 'Valores inválidos'; END IF;
   _lucro_cents := _venda_cents - _custo_cents - _taxas_cents;

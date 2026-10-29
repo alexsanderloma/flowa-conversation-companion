@@ -156,7 +156,15 @@ export const caixaConfirmManualSale = createServerFn({ method: "POST" })
       _venda_cents: data.totalCents,
       _data_venda: data.date,
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[Caixa] Falha ao confirmar venda manual pela RPC", {
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        message: error.message,
+      });
+      throw new Error(error.message);
+    }
     return { id: saleId as string };
   });
 

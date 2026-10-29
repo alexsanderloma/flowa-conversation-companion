@@ -90,7 +90,7 @@ export const caixaDashboard = createServerFn({ method: "POST" })
 export const caixaProducts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { companyId } = await currentCompany(context.supabase, context.userId);
+    await currentCompany(context.supabase, context.userId);
     // Cost is deliberately excluded from browser payloads. It stays in the
     // database/RPC path and must never be exposed by a catalog endpoint.
     const { data, error } = await context.supabase.from("produto").select("id,nome,descricao,preco,estoque_disponivel,estoque_controlado,disponivel,imagem_url,variantes,ativo,ordem").eq("company_id", companyId).eq("ativo", true).eq("disponivel", true).order("ordem", { ascending: true });
@@ -144,56 +144,20 @@ export const caixaConfirmManualSale = createServerFn({ method: "POST" })
     const payment = paymentMap[data.paymentMethod];
     if (!payment) throw new Error("Selecione a forma de pagamento");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const costCents = data.totalCents - data.profitCents;
-    const observation = JSON.stringify({
-      flowa_manual_sale: true,
-      employee_name: data.employeeName,
-      payment_label: payment.label,
+    // A venda é gravada pela RPC SECURITY DEFINER: o navegador nunca recebe
+    // permissão direta para tabelas financeiras e a empresa vem da sessão.
+    const { data: saleId, error } = await context.supabase.rpc("caixa_confirmar_venda_manual", {
+      _quantidade: data.quantity,
+      _produto_nome: data.productName,
+      _forma_pagamento: payment.databaseValue,
+      _pagamento_rotulo: payment.label,
+      _funcionario_nome: data.employeeName,
+      _lucro_cents: data.profitCents,
+      _venda_cents: data.totalCents,
+      _data_venda: data.date,
     });
-    const { data: sale, error: saleError } = await supabaseAdmin
-      .from("caixa_venda")
-      .insert({
-        company_id: companyId,
-        vendedor_id: context.userId,
-        forma_pagamento: payment.databaseValue,
-        status: "confirmada",
-        venda_cents: data.totalCents,
-        custo_cents: costCents,
-        lucro_cents: data.profitCents,
-        observacao: observation,
-        data_venda: data.date,
-        confirmado_em: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
-    if (saleError || !sale) throw new Error(saleError?.message ?? "Não foi possível registrar a venda");
-
-    const { error: itemError } = await supabaseAdmin.from("caixa_venda_item").insert({
-      venda_id: sale.id,
-      company_id: companyId,
-      produto_id: null,
-      produto_nome_snapshot: data.productName,
-      quantidade: data.quantity,
-      preco_unitario_cents: Math.round(data.totalCents / data.quantity),
-      custo_unitario_cents: Math.round(costCents / data.quantity),
-      total_venda_cents: data.totalCents,
-      total_custo_cents: costCents,
-    });
-    if (itemError) {
-      await supabaseAdmin.from("caixa_venda").delete().eq("id", sale.id).eq("company_id", companyId);
-      throw new Error(itemError.message);
-    }
-    const { error: auditError } = await supabaseAdmin.from("caixa_auditoria").insert({
-      company_id: companyId,
-      entidade: "venda",
-      entidade_id: sale.id,
-      acao: "confirmar_manual",
-      autor_id: context.userId,
-      depois: { quantidade: data.quantity, produto: data.productName, funcionario: data.employeeName, pagamento: payment.label, lucro_cents: data.profitCents, total_cents: data.totalCents },
-    });
-    if (auditError) console.error("Falha ao gravar auditoria do Caixa", auditError.message);
-    return { id: sale.id };
+    if (error) throw new Error(error.message);
+    return { id: saleId as string };
   });
 
 export const caixaCancelSale = createServerFn({ method: "POST" })

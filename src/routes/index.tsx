@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowRight, BarChart3, Bot, Check, ChevronDown, Clock, GraduationCap, HeartPulse, Home, Menu, MessageSquareText, Plug, ShoppingBag, Sparkles, Target, Users, UtensilsCrossed, Wrench, X, Zap, ShieldCheck } from "lucide-react";
-import { BrandMark } from "@/components/brand-mark";
+import { BrandLogo, BrandMark } from "@/components/brand-mark";
 import { FlowaDashboardMockup } from "@/components/flowa-dashboard-mockup";
 import { brand, supportWhatsappUrl } from "@/config/brand";
 
@@ -26,7 +26,7 @@ function Landing() {
   return <div className="flowa-next min-h-screen overflow-x-hidden"><Navbar /><main id="conteudo"><Hero /><Benefits /><PainSolution /><Features /><HowItWorks /><Segments /><DashboardHighlight /><Pricing /><Faq /><FinalCta /></main><Footer /></div>;
 }
 
-function Logo() { return <Link to="/" className="flex items-center gap-2.5" aria-label="FLOWA — início"><BrandMark className="size-8" /><span className="text-lg font-semibold tracking-tight">{brand.name}</span></Link>; }
+function Logo() { return <Link to="/" className="flex items-center" aria-label="FLOWA — início"><BrandLogo className="h-9 max-w-[148px]" /></Link>; }
 function Navbar() {
   const [open, setOpen] = useState(false);
   return <header className="fx-nav fixed inset-x-0 top-0 z-50 border-b"><nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5" aria-label="Principal"><Logo /><ul className="hidden items-center gap-8 lg:flex">{nav.map(([label, href]) => <li key={href}><a href={href} className="text-sm text-white/60 transition hover:text-white">{label}</a></li>)}</ul><div className="hidden items-center gap-3 lg:flex"><Link to="/entrar" className="px-3 py-2 text-sm text-white/65 hover:text-white">Entrar</Link><Link to="/entrar" search={{ modo: "signup" }} className="fx-brand-button">Começar agora <ArrowRight className="size-4" /></Link></div><button className="lg:hidden" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? "Fechar menu" : "Abrir menu"}>{open ? <X className="size-6" /> : <Menu className="size-6" />}</button></nav>{open && <div className="border-t border-white/10 px-5 pb-6 lg:hidden"><ul className="flex flex-col py-2">{nav.map(([label, href]) => <li key={href}><a href={href} onClick={() => setOpen(false)} className="block py-3 text-base">{label}</a></li>)}<li><Link to="/entrar" className="block py-3 text-base text-white/65">Entrar</Link></li></ul><Link to="/entrar" search={{ modo: "signup" }} onClick={() => setOpen(false)} className="fx-brand-button flex justify-center">Criar conta</Link></div>}</header>;

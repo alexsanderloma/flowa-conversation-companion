@@ -13,7 +13,7 @@ import {
   Bot,
   ArrowLeft,
 } from "lucide-react";
-import { BrandMark } from "@/components/brand-mark";
+import { BrandLogo } from "@/components/brand-mark";
 import { brand } from "@/config/brand";
 import { resolveAuthMode, validateSignup, PASSWORD_MIN, type AuthMode } from "@/lib/auth-mode";
 import { withTimeout, isAuthConnectionError, AUTH_CONNECTION_MESSAGE, resolvePostAuthDestination } from "@/lib/auth-timeout";
@@ -152,9 +152,8 @@ function EntrarPage() {
         {/* LEFT — brand pane (hidden on mobile) */}
         <aside className="auth-brand-pane hidden lg:flex flex-col justify-between p-10 xl:p-14 border-r border-border bg-background/60">
           <div className="flex items-center justify-between gap-4">
-            <Link to="/" className="flex items-center gap-2" aria-label="FLOWA — início">
-              <BrandMark className="size-9" />
-              <span className="font-display text-lg font-semibold tracking-tight">{brand.name}</span>
+            <Link to="/" className="flex items-center" aria-label="FLOWA — início">
+              <BrandLogo className="h-10 max-w-[158px]" />
             </Link>
             <Link to="/" className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-foreground hover:bg-[color:var(--brand-soft)] hover:text-foreground transition-colors">
               <ArrowLeft className="size-4" /> voltar ao site
@@ -195,10 +194,7 @@ function EntrarPage() {
             <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
               <ArrowLeft className="size-4" /> voltar
             </Link>
-            <div className="flex items-center gap-2">
-              <BrandMark className="size-9" />
-              <div className="font-display font-bold text-[15px] text-gradient-brand">{brand.name}</div>
-            </div>
+            <BrandLogo className="h-9 max-w-[142px]" />
           </div>
 
           <div className="w-full max-w-md">

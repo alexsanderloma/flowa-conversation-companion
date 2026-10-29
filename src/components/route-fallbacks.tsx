@@ -1,16 +1,15 @@
 import { useEffect } from "react";
 import { useRouter, type ErrorComponentProps } from "@tanstack/react-router";
-import { Loader2, MessageSquareText } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { reportLovableError } from "@/lib/lovable-error-reporting";
 import { brand, supportWhatsappUrl, supportWhatsappDisplay } from "@/config/brand";
+import { BrandMark } from "@/components/brand-mark";
 
 export function RoutePendingComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="flex flex-col items-center gap-4">
-        <div className="size-12 rounded-xl grid place-items-center bg-gradient-brand text-primary-foreground shadow-md">
-          <MessageSquareText className="size-6" />
-        </div>
+        <BrandMark className="size-14" />
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
           <span>Carregando {brand.name}…</span>

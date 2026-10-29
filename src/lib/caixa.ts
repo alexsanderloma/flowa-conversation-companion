@@ -26,6 +26,19 @@ export function netProfit({ revenueCents, costCents, effectiveExpenseCents, fees
   return { grossProfitCents, netProfitCents: grossProfitCents - effectiveExpenseCents - feesCents };
 }
 
+/**
+ * Converts a percentage stored as basis points to its monetary amount.
+ * 319 basis points means 3.19%. A per-installment charge applies only after
+ * the first installment, so a one-time credit sale uses its base rate only.
+ */
+export function paymentFeeCents(totalCents: number, baseBps = 0, perInstallmentBps = 0, installments = 1) {
+  const safeTotal = Math.max(0, Math.round(totalCents));
+  const safeBase = Math.max(0, Math.round(baseBps));
+  const safePerInstallment = Math.max(0, Math.round(perInstallmentBps));
+  const safeInstallments = Math.max(1, Math.floor(installments));
+  return Math.round((safeTotal * (safeBase + safePerInstallment * Math.max(0, safeInstallments - 1))) / 10000);
+}
+
 export function isEffectiveEmployeeExpense(type: "diaria" | "vale" | "meta") {
   return type !== "vale";
 }

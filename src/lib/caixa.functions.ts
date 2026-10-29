@@ -59,9 +59,14 @@ export const caixaDashboard = createServerFn({ method: "POST" })
       salesQuery = salesQuery.gte("data_venda", start).lt("data_venda", endExclusive);
       expenseQuery = expenseQuery.gte("data_lancamento", start).lt("data_lancamento", endExclusive);
     }
-    const [{ data: sales, error: salesError }, { data: expenses, error: expenseError }] = await Promise.all([salesQuery.order("created_at", { ascending: false }), expenseQuery.order("data_lancamento", { ascending: false })]);
+    const [{ data: sales, error: salesError }, { data: expenses, error: expenseError }, { data: paymentFees, error: paymentFeesError }] = await Promise.all([
+      salesQuery.order("created_at", { ascending: false }),
+      expenseQuery.order("data_lancamento", { ascending: false }),
+      context.supabase.from("caixa_taxa_pagamento").select("metodo,percentual_bps,percentual_parcela_bps").eq("company_id", companyId),
+    ]);
     if (salesError) throw new Error(salesError.message);
     if (expenseError) throw new Error(expenseError.message);
+    if (paymentFeesError) throw new Error(paymentFeesError.message);
     const sellerIds = [...new Set((sales ?? []).map((sale: any) => sale.vendedor_id).filter(Boolean))];
     const { data: profiles, error: profilesError } = sellerIds.length
       ? await context.supabase.from("profiles").select("user_id,nome,email").in("user_id", sellerIds)
@@ -84,13 +89,13 @@ export const caixaDashboard = createServerFn({ method: "POST" })
     const feesCents = confirmed.reduce((sum: number, sale: any) => sum + Number(sale.taxas_cents ?? 0), 0);
     const effectiveExpenseCents = (expenses ?? []).filter((expense: any) => isEffectiveEmployeeExpense(expense.tipo)).reduce((sum: number, expense: any) => sum + Number(expense.valor_cents), 0);
     const grossProfitCents = revenueCents - costCents;
-    return { sales: salesWithSeller, expenses: expenses ?? [], role, summary: { revenueCents, costCents, feesCents, effectiveExpenseCents, grossProfitCents, netProfitCents: grossProfitCents - effectiveExpenseCents - feesCents, transactions: confirmed.length, averageTicketCents: confirmed.length ? Math.round(revenueCents / confirmed.length) : 0 }, range: { start, endExclusive } };
+    return { sales: salesWithSeller, expenses: expenses ?? [], paymentFees: paymentFees ?? [], role, summary: { revenueCents, costCents, feesCents, effectiveExpenseCents, grossProfitCents, netProfitCents: grossProfitCents - effectiveExpenseCents - feesCents, transactions: confirmed.length, averageTicketCents: confirmed.length ? Math.round(revenueCents / confirmed.length) : 0 }, range: { start, endExclusive } };
   });
 
 export const caixaProducts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await currentCompany(context.supabase, context.userId);
+    const { companyId } = await currentCompany(context.supabase, context.userId);
     // Cost is deliberately excluded from browser payloads. It stays in the
     // database/RPC path and must never be exposed by a catalog endpoint.
     const { data, error } = await context.supabase.from("produto").select("id,nome,descricao,preco,estoque_disponivel,estoque_controlado,disponivel,imagem_url,variantes,ativo,ordem").eq("company_id", companyId).eq("ativo", true).eq("disponivel", true).order("ordem", { ascending: true });
@@ -117,22 +122,24 @@ export const caixaConfirmSale = createServerFn({ method: "POST" })
  */
 export const caixaConfirmManualSale = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { quantity: number; productName: string; paymentMethod: string; employeeName: string; profitCents: number; totalCents: number; date: string }) => ({
+  .inputValidator((d: { quantity: number; productName: string; paymentMethod: string; employeeName: string; costCents: number; feesCents: number; installments?: number; totalCents: number; date: string }) => ({
     quantity: Math.floor(Number(d.quantity)),
     productName: String(d.productName ?? "").trim().slice(0, 240),
     paymentMethod: String(d.paymentMethod ?? "").trim(),
     employeeName: String(d.employeeName ?? "").trim().slice(0, 120),
-    profitCents: Number(d.profitCents),
+    costCents: Number(d.costCents),
+    feesCents: Number(d.feesCents),
+    installments: Math.max(1, Math.floor(Number(d.installments ?? 1))),
     totalCents: Number(d.totalCents),
     date: isoDate(d.date),
   }))
   .handler(async ({ context, data }) => {
-    const { companyId } = await currentCompany(context.supabase, context.userId);
+    await currentCompany(context.supabase, context.userId);
     if (!Number.isInteger(data.quantity) || data.quantity < 1 || data.quantity > 10000) throw new Error("Informe uma quantidade válida");
     if (data.productName.length < 2) throw new Error("Informe o produto vendido");
     if (data.employeeName.length < 2) throw new Error("Informe o funcionário responsável");
     if (!Number.isInteger(data.totalCents) || data.totalCents <= 0) throw new Error("Informe o total da venda");
-    if (!Number.isInteger(data.profitCents) || data.profitCents < 0 || data.profitCents > data.totalCents) throw new Error("Informe um lucro válido");
+    if (!Number.isInteger(data.costCents) || data.costCents < 0 || !Number.isInteger(data.feesCents) || data.feesCents < 0) throw new Error("Informe o custo e a taxa corretamente");
 
     const paymentMap: Record<string, { databaseValue: string; label: string }> = {
       "credito_a_vista": { databaseValue: "credito", label: "Crédito à vista" },
@@ -146,13 +153,14 @@ export const caixaConfirmManualSale = createServerFn({ method: "POST" })
 
     // A venda é gravada pela RPC SECURITY DEFINER: o navegador nunca recebe
     // permissão direta para tabelas financeiras e a empresa vem da sessão.
-    const { data: saleId, error } = await context.supabase.rpc("caixa_confirmar_venda_manual", {
+    const { data: saleId, error } = await context.supabase.rpc("caixa_confirmar_venda_manual_v2", {
       _quantidade: data.quantity,
       _produto_nome: data.productName,
       _forma_pagamento: payment.databaseValue,
-      _pagamento_rotulo: payment.label,
+      _pagamento_rotulo: data.paymentMethod === "parcelado" ? `Parcelado · ${data.installments}x` : payment.label,
       _funcionario_nome: data.employeeName,
-      _lucro_cents: data.profitCents,
+      _custo_cents: data.costCents,
+      _taxas_cents: data.feesCents,
       _venda_cents: data.totalCents,
       _data_venda: data.date,
     });
@@ -166,6 +174,33 @@ export const caixaConfirmManualSale = createServerFn({ method: "POST" })
       throw new Error(error.message);
     }
     return { id: saleId as string };
+  });
+
+export const caixaSavePaymentFees = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { fees: Array<{ method: string; percentageBps: number; installmentPercentageBps?: number }> }) => ({
+    fees: Array.isArray(d.fees) ? d.fees.map((fee) => ({
+      method: String(fee.method ?? ""),
+      percentageBps: Math.round(Number(fee.percentageBps)),
+      installmentPercentageBps: Math.round(Number(fee.installmentPercentageBps ?? 0)),
+    })) : [],
+  }))
+  .handler(async ({ context, data }) => {
+    const { companyId, role } = await currentCompany(context.supabase, context.userId);
+    requireManager(role);
+    const methods = ["pix", "dinheiro", "debito", "credito_a_vista", "parcelado"];
+    if (data.fees.length !== methods.length || new Set(data.fees.map((fee) => fee.method)).size !== methods.length || data.fees.some((fee) => !methods.includes(fee.method) || !Number.isInteger(fee.percentageBps) || fee.percentageBps < 0 || fee.percentageBps > 10000 || !Number.isInteger(fee.installmentPercentageBps) || fee.installmentPercentageBps < 0 || fee.installmentPercentageBps > 10000)) {
+      throw new Error("As taxas informadas são inválidas");
+    }
+    const { error } = await context.supabase.from("caixa_taxa_pagamento").upsert(data.fees.map((fee) => ({
+      company_id: companyId,
+      metodo: fee.method,
+      percentual_bps: fee.percentageBps,
+      percentual_parcela_bps: fee.installmentPercentageBps,
+      updated_at: new Date().toISOString(),
+    })), { onConflict: "company_id,metodo" });
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });
 
 export const caixaCancelSale = createServerFn({ method: "POST" })

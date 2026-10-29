@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { brand } from "@/config/brand";
-import { caixaConfirmManualSale, caixaDashboard } from "@/lib/caixa.functions";
+import { caixaDashboard } from "@/lib/caixa.functions";
 import { fromCents, toCents } from "@/lib/caixa";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/app/caixa")({
   head: () => ({ meta: [{ title: `${brand.name} — Caixa` }] }),
@@ -29,7 +30,6 @@ const emptyLine = (): SaleLine => ({ quantity: "", product: "", payment: "", emp
 
 function CaixaPage() {
   const dashboard = useServerFn(caixaDashboard);
-  const confirmManualSale = useServerFn(caixaConfirmManualSale);
   const [date, setDate] = useState(today);
   const [mode, setMode] = useState<"day" | "week" | "month">("day");
   const [data, setData] = useState<any>(null);
@@ -55,7 +55,22 @@ function CaixaPage() {
     if (profitCents > totalCents) { toast.error("O lucro não pode ser maior que o total"); return; }
     setSaving(true);
     try {
-      await confirmManualSale({ data: { quantity: Number(line.quantity), productName: line.product, paymentMethod: line.payment, employeeName: line.employee, profitCents, totalCents, date } });
+      const payment = paymentOptions.find((option) => option.value === line.payment);
+      if (!payment) throw new Error("Selecione a forma de pagamento");
+      const databasePayment = line.payment === "pix" || line.payment === "dinheiro" || line.payment === "debito" ? line.payment : "credito";
+      // A função no Supabase é SECURITY DEFINER e valida a empresa/role a
+      // partir da sessão. Não há INSERT direto do navegador nas tabelas.
+      const { error } = await supabase.rpc("caixa_confirmar_venda_manual", {
+        _quantidade: Number(line.quantity),
+        _produto_nome: line.product,
+        _forma_pagamento: databasePayment,
+        _pagamento_rotulo: payment.label,
+        _funcionario_nome: line.employee,
+        _lucro_cents: profitCents,
+        _venda_cents: totalCents,
+        _data_venda: date,
+      });
+      if (error) throw new Error(error.message);
       toast.success("Venda confirmada e adicionada ao histórico"); setLine(emptyLine()); await load();
     } catch (error: any) { toast.error(error?.message ?? "Não foi possível registrar a venda"); }
     finally { setSaving(false); }
